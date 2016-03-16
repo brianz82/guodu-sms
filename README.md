@@ -1,0 +1,1 @@
+Use APIs exposed by guodu to implement SMS related service, including SMS sending, surplus checking, etc.

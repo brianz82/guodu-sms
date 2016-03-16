@@ -1,0 +1,13 @@
+{
+  "name": "homer/guodu-sms",
+  "description": "SMS service implementation with guodu as backend",
+  "license": "proprietary",
+  "autoload": {
+    "psr-4": {
+      "Homer\\Sms\\Guodu\\": "src/"
+    }
+  },
+  "require": {
+    "guzzlehttp/guzzle": "^6.1"
+  }
+}
