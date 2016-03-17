@@ -1,13 +1,38 @@
 {
   "name": "homer/guodu-sms",
+  "version": "1.0.0",
   "description": "SMS service implementation with guodu as backend",
   "license": "proprietary",
+  "type": "library",
+
   "autoload": {
+    "files": [
+      "src/Support/helpers.php"
+    ],
     "psr-4": {
       "Homer\\Sms\\Guodu\\": "src/"
     }
   },
+
+  "autoload-dev": {
+    "psr-4": {
+      "spec\\": "spec/"
+    }
+  },
+
+  "config": {
+    "preferred-install": "dist"
+  },
+
+  "minimum-stability": "dev",
+  "prefer-stable": true,
+
   "require": {
+    "ext-mbstring": "*",
     "guzzlehttp/guzzle": "^6.1"
+  },
+
+  "require-dev": {
+    "phpspec/phpspec": "^2.4"
   }
 }
