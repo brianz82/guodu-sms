@@ -2,6 +2,7 @@
 
 namespace Homer\Sms\Guodu;
 
+use GuzzleHttp\Client;
 use GuzzleHttp\RequestOptions;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Psr7\Response;
@@ -35,6 +36,24 @@ class Service
     const SEND_TYPE_LONG       = 15;
     // ==== End of Message type =====
 
+    // ==== Name position ====
+
+    /**
+     * don't add name to message
+     */
+    const NAME_POS_NONE        = 0;
+
+    /**
+     * append the name to message
+     */
+    const NAME_POS_APPEND      = 1;
+
+    /**
+     * prepend the name to message
+     */
+    const NAME_POS_PREPEND     = 2;
+    // ==== End of Name position =====
+
     const RESPONSE_PHRASES = [
         '00' => '短信提交成功',  // 批量短信
         '01' => '短信提交成功',  // 个性化短信
@@ -64,17 +83,11 @@ class Service
     private $password;
 
     /**
-     * a part of sender's number that will be used to send the message
-     * @var null|string
-     */
-    private $affix;
-
-    /**
-     * sms signature - suffix appended to the message
+     * more options
      *
-     * @var string
+     * @var array
      */
-    private $signature;
+    private $options;
 
     /**
      * http client
@@ -85,29 +98,37 @@ class Service
     /**
      * @param string $account           account used to send message
      * @param string $password          password paired with account, should be MD5'd
-     * @param string $signature         (optional) sms signature - suffix appended to the message. e.g., 【Homer】
-     * @param ClientInterface $client   client used to sending http request
-     * @param string $affix             (optional) 附加号码 a part of sender's number that will be used to
      *                                  send the message. ot more than 6 digits, suggested 4.
+     * @param array $options            some more configurations:
+     *                                  - name       name of merchant, will be either prepend or append to
+     *                                               the message. e.g., 【XXX】
+     *                                  - affix      附加号码 a part of sender's number that will be used to
+     *                                  - send_url   url used to send message
+     *                                  - quota_url  url used to query quota
+     * @param ClientInterface $client   client used to sending http request
      */
-    public function __construct($account, $password, ClientInterface $client, $signature = '', $affix = '')
+    public function __construct($account, $password, $options = [], ClientInterface $client = null)
     {
         $this->account   = $account;
         $this->password  = $password;
-        $this->signature = $signature;
-        $this->affix     = $affix;
+        $this->options   = array_merge([
+            'send_url'  => self::SEND_URL,
+            'quota_url' => self::QUOTA_URL,
+        ], $options);
 
-        $this->client = $client;
+        $this->client = $client ?: $this->createDefaultHttpClient();
     }
 
     /**
      * @param string $message           message to deliver
      * @param string|array $subscriber  subscriber or a list of subscribers
      * @param array $options            available options include:
-     *                                  - send_time  [optional] when will this message be delivered. If empty, the
+     *                                  - send_time  (optional) when will this message be delivered. If empty, the
      *                                               message will be delivered right away (in YYYYMMDDHHIISS format)
-     *                                  - msg_type   [optional]  message type. Should one either SEND_TYPE_PLAIN (for
+     *                                  - msg_type   (optional)  message type. Should one either SEND_TYPE_PLAIN (for
      *                                               普通短信, which is default) or SEND_TYPE_LONG (for 长短信)
+     *                                  - name_pos   (optional) name position in the message, should be one of
+     *                                               NAME_POS_NONE, NAME_POS_APPEND(default) and NAME_POS_PREPEND
      *                                  - expires_at [optional] message can be temporarily stored on message server, and
      *                                               we're allowed to give it an expiry time (in YYYYMMDDHHIISS format)
      */
@@ -128,7 +149,8 @@ class Service
         }
 
         // send the message
-        $this->sendMessage($message . $this->signature, (array)$subscriber, $options);
+        $namePos = isset($options['name_pos']) ? $options['name_pos'] : self::NAME_POS_APPEND;
+        $this->sendMessage($this->formatMessage($message, $namePos), (array)$subscriber, $options);
     }
 
     // check whether the given message exceeds the limit in length
@@ -193,7 +215,7 @@ class Service
     private function doSendMessage($message, $subscribers, array $options = [])
     {
         // send request and parse response
-        $response = $this->client->request('POST', self::SEND_URL,
+        $response = $this->client->request('POST', $this->getSendUrl(),
             [RequestOptions::FORM_PARAMS => $this->buildRequestForSending($subscribers, $message, $options)]);
 
         if ($response) {
@@ -224,7 +246,7 @@ class Service
             'OperPass'    => $this->password,
             'SendTime'    => $sendTime,
             'ValidTime'   => $expiresAt,
-            'AppendID'    => $this->affix,   // 附加号码
+            'AppendID'    => $this->getAffix(),   // 附加号码
             'DesMobile'   => implode(',', $subscribes),
             'Content'     => mb_convert_encoding($message, 'gbk', 'utf-8'),
             'ContentType' => $sendType,
@@ -234,7 +256,7 @@ class Service
     // build http request for querying quota
     private function buildRequestUrlForConsulting()
     {
-        return self::QUOTA_URL . http_build_query([
+        return $this->getQuotaUrl() . http_build_query([
             'OperID'      => $this->account,
             'OperPass'    => $this->password,
         ]);
@@ -291,4 +313,82 @@ class Service
 
         return simplexml_load_string($response);
     }
+
+    /**
+     * format the message that will be delivered
+     *
+     * @param string $message     message to send
+     * @param int $namePosition   position of merchant name in the message
+     * @return string
+     */
+    private function formatMessage($message, $namePosition)
+    {
+        $name = $this->getName();
+        if (empty($name)) {  // no name
+            return $message;
+        }
+
+        switch ($namePosition) {
+            case self::NAME_POS_NONE:
+                return $message;
+            case self::NAME_POS_APPEND:
+                return $message . $name;
+            case self::NAME_POS_PREPEND:
+                return $name . $message;
+        }
+
+        return $message;
+    }
+
+    /**
+     * create default http client
+     *
+     * @param array $config        Client configuration settings. See \GuzzleHttp\Client::__construct()
+     * @return \GuzzleHttp\Client
+     */
+    private function createDefaultHttpClient(array $config = [])
+    {
+        return new Client($config);
+    }
+
+    /**
+     * get url for sending message
+     *
+     * @return string
+     */
+    private function getSendUrl()
+    {
+        return array_get($this->options, 'send_url');
+    }
+
+    /**
+     * get url for querying quota
+     *
+     * @return string
+     */
+    private function getQuotaUrl()
+    {
+        return array_get($this->options, 'quota_url');
+    }
+
+    /**
+     * get affix
+     *
+     * @return mixed
+     */
+    private function getAffix()
+    {
+        return array_get($this->options, 'affix');
+    }
+
+    /**
+     * get merchant name
+     *
+     * @return string
+     */
+    private function getName()
+    {
+        return array_get($this->options, 'name');
+    }
+
 }

@@ -18,9 +18,8 @@ class ServiceSpec extends ObjectBehavior
         $this->beAnInstanceOf(\Homer\Sms\Guodu\Service::class, [
             'account',    // account
             'password',   // password
+            [ 'name' => '', 'affix' => '1234' ], // options
             $client,      // http client
-            '',           // signature
-            '1234',       // affix
         ]);
     }
     
