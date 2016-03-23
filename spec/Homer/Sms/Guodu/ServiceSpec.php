@@ -56,7 +56,7 @@ class ServiceSpec extends ObjectBehavior
 
         $this->shouldNotThrow()->duringSend('发送消息', '13800138000');
     }
-//
+
     function it_should_have_message_sent_for_multiple_subscribers(ClientInterface $client)
     {
         $client->request('POST', 'http://221.179.180.158:9007/QxtSms/QxtFirewall',
@@ -104,6 +104,43 @@ class ServiceSpec extends ObjectBehavior
                 file_get_contents(__DIR__ . '/data/multi_success.xml')));
 
         $this->shouldNotThrow()->duringSend('message', array_merge($subscribersBatchOne, $subscribersBatchTwo));
+    }
+
+    function it_should_have_message_sent_roundtrip_for_single_subscriber(ClientInterface $client)
+    {
+        $client->request('POST', 'http://221.179.180.158:9007/QxtSms/QxtFirewall',
+            Argument::that(function (array $request) {
+                $request = $request[RequestOptions::FORM_PARAMS];
+                return $request['OperID']    == 'account' &&
+                $request['OperPass']  == 'password' &&
+                $request['AppendID']  == '1234' &&
+                $request['DesMobile'] == '13800138000' &&
+                // it's GBK-encoded
+                mb_convert_encoding($request['Content'], 'utf-8', 'gbk')  == '发送消息';
+            }))->shouldBeCalledTimes(1)->willReturn(new Response(200, [], file_get_contents(__DIR__ . '/data/single_success.xml')));
+
+        $ret = $this->send('发送消息', '13800138000', [ 'round_trip' => true ]);
+        $ret->shouldHaveCount(1);
+        $ret->shouldHaveKeyWithValue('13800138000', '20081104123453654785');
+    }
+
+    function it_should_have_message_sent_roundtrip_for_multiple_subscriber(ClientInterface $client)
+    {
+        $client->request('POST', 'http://221.179.180.158:9007/QxtSms/QxtFirewall',
+            Argument::that(function (array $request) {
+                $request = $request[RequestOptions::FORM_PARAMS];
+                return $request['OperID']    == 'account' &&
+                $request['OperPass']  == 'password' &&
+                $request['AppendID']  == '1234' &&
+                $request['DesMobile'] == '13800138000' &&
+                // it's GBK-encoded
+                mb_convert_encoding($request['Content'], 'utf-8', 'gbk')  == '发送消息';
+            }))->shouldBeCalledTimes(1)->willReturn(new Response(200, [], file_get_contents(__DIR__ . '/data/multi_success.xml')));
+
+        $ret = $this->send('发送消息', '13800138000', [ 'round_trip' => true ]);
+        $ret->shouldHaveCount(2);
+        $ret->shouldHaveKeyWithValue('13800138000', '20081104123453654785');
+        $ret->shouldHaveKeyWithValue('13800138001', '20081104123453654786');
     }
 
     private function makeSubscribers($prefix, $from, $to)

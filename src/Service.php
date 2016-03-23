@@ -129,8 +129,11 @@ class Service
      *                                               普通短信, which is default) or SEND_TYPE_LONG (for 长短信)
      *                                  - name_pos   (optional) name position in the message, should be one of
      *                                               NAME_POS_NONE, NAME_POS_APPEND(default) and NAME_POS_PREPEND
-     *                                  - expires_at [optional] message can be temporarily stored on message server, and
+     *                                  - expires_at (optional) message can be temporarily stored on message server, and
      *                                               we're allowed to give it an expiry time (in YYYYMMDDHHIISS format)
+     *                                  - round_trip (optional) when turned on, the response from guodu will be parsed
+     *                                               and returned. default false.
+     * @return null|array
      */
     public function send($message, $subscriber, array $options = [])
     {
@@ -150,7 +153,7 @@ class Service
 
         // send the message
         $namePos = isset($options['name_pos']) ? $options['name_pos'] : self::NAME_POS_APPEND;
-        $this->sendMessage($this->formatMessage($message, $namePos), (array)$subscriber, $options);
+        return $this->sendMessage($this->formatMessage($message, $namePos), (array)$subscriber, $options);
     }
 
     // check whether the given message exceeds the limit in length
@@ -190,13 +193,18 @@ class Service
         $numberOfBatch = ceil(count($subscribers) / $numberOfSubscribersPerBatch);
         $offset = 0;
 
+        $response = []; // the response of sending message
+
         // send message to subscribers in batch
         for ($batch = 0; $batch < $numberOfBatch; $batch++) {
             // find subscribers for each batch
             $subscribersPerBatch = array_slice($subscribers, $offset, $numberOfSubscribersPerBatch);
             $offset += $numberOfSubscribersPerBatch;
             if (!empty($subscribersPerBatch)) { // got some subscriber
-                $this->doSendMessage($message, $subscribersPerBatch, $options);
+                $batchResponse = $this->doSendMessage($message, $subscribersPerBatch, $options);
+                if (!empty($batchResponse)) {
+                    $response = $response + $batchResponse;
+                }
 
                 // if the actual #. of subscribers is less than batch size
                 // we're sure that the last batch was just processed
@@ -209,6 +217,8 @@ class Service
 
             break;  // no subscriber(s)
         }
+
+        return empty($response) ? null : $response;
     }
 
     // do the actual work of sending short message
@@ -219,7 +229,7 @@ class Service
             [RequestOptions::FORM_PARAMS => $this->buildRequestForSending($subscribers, $message, $options)]);
 
         if ($response) {
-            $this->parseSendResponse($response);
+            return $this->parseSendResponse($response, array_get($options, 'round_trip', false));
         } else {
             throw new \Exception('短信服务异常');
         }
@@ -277,7 +287,7 @@ class Service
     }
 
     // parse the message sending response
-    private function parseSendResponse(Response $response)
+    private function parseSendResponse(Response $response, $roundTrip = false)
     {
         if ($response->getStatusCode() != 200) {
             throw new \Exception('短信服务异常');
@@ -291,11 +301,34 @@ class Service
 
         // succeeded?
         if (!in_array((string)$response->code, ['00', '01', '03'])) { // no
-            throw new \Exception(array_get(self::RESPONSE_PHRASES, $response->code,
+            throw new \Exception(array_get(self::RESPONSE_PHRASES, (string)$response->code,
                 sprintf('短信发送异常(%s)', $response->code)));
         }
 
-        // TODO: the message id ($response->msgid) counts?
+        // parse message id
+        if (!$roundTrip) {  // id for each message does not matter
+            return;
+        }
+
+        // the response is not a standard one as the <response> contains multiple <message> node
+        // as well as non-<message> node, (e.g., the <code>), and this brings us some trouble -
+        // the first will prevent the parser from parsing subsequent ones, and thus there will
+        // leave only one (the first) message parsed
+        // there's one way to overcome this - by json_encode and re-decode
+        $response = json_decode(json_encode($response), false);
+
+        // $response->message can either be an object or an array. But when it's an object, converting
+        // it with (array)obj will produce an array with each object's attribute as key, which is
+        // not desired - we need an array with that object nested
+        $messages = $response->message;
+        if (!is_array($messages)) {
+            $messages = [$messages];
+        }
+
+        return array_reduce($messages, function ($messages, $message) {
+            $messages[(string)$message->desmobile] = $message->msgid;
+            return $messages;
+        }, []);
     }
 
     //
