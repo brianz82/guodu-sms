@@ -39,7 +39,7 @@ $quota = $service->queryQuota();
 	* ``msg_type``   message type. Should one either 8 (for 普通短信, which is default) or 15 (for 长短信)
 	* ``name_pos``  name position in the message, should be one of 0(for hiding name), 1(for appending, which is default) and 2 (for prepending to the message)
 	* ``expires_at`` message can be temporarily stored on message server, and we're allowed to give it an expiry time. It's in YYYYMMDDHHIISS format.
-    * ``round_trip_`` when turned on, the response from guodu will be parsed and returned. default false.
+    * ``round_trip`` when turned on, the response from guodu will be parsed and returned. default false.
 
 ### query quota
 ``queryQuota()``
