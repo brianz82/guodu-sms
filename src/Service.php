@@ -290,7 +290,7 @@ class Service
         $response = $this->parseResponseAsSimpleXmlElement((string)$response->getBody());
 
         // succeeded?
-        if (!in_array($response->code, ['00', '01', '03'])) { // no
+        if (!in_array((string)$response->code, ['00', '01', '03'])) { // no
             throw new \Exception(array_get(self::RESPONSE_PHRASES, $response->code,
                 sprintf('短信发送异常(%s)', $response->code)));
         }
