@@ -1,6 +1,6 @@
 {
   "name": "homer/guodu-sms",
-  "version": "1.0.2",
+  "version": "1.0.0",
   "description": "SMS service implementation with guodu as backend",
   "license": "proprietary",
   "type": "library",
