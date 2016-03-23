@@ -22,7 +22,7 @@ class Service
      * base url for querying quota
      * @var string
      */
-    const QUOTA_URL = 'http://221.179.180.158:8081/QxtSms_surplus/surplus?';
+    const QUOTA_URL = 'http://221.179.180.158:8081/QxtSms_surplus/surplus';
 
     // ==== Message type =====
     /**
@@ -98,11 +98,11 @@ class Service
     /**
      * @param string $account           account used to send message
      * @param string $password          password paired with account, should be MD5'd
-     *                                  send the message. ot more than 6 digits, suggested 4.
      * @param array $options            some more configurations:
      *                                  - name       name of merchant, will be either prepend or append to
      *                                               the message. e.g., 【XXX】
      *                                  - affix      附加号码 a part of sender's number that will be used to
+     *                                               send the message. not more than 6 digits, suggested 4.
      *                                  - send_url   url used to send message
      *                                  - quota_url  url used to query quota
      * @param ClientInterface $client   client used to sending http request
@@ -256,10 +256,24 @@ class Service
     // build http request for querying quota
     private function buildRequestUrlForConsulting()
     {
-        return $this->getQuotaUrl() . http_build_query([
+        return self::buildHttpGetUrl($this->getQuotaUrl(), [
             'OperID'      => $this->account,
             'OperPass'    => $this->password,
         ]);
+    }
+
+    private static function buildHttpGetUrl($base, array $params = [])
+    {
+        $questionMarkPos = strpos($base, '?');
+        if ($questionMarkPos === false) {
+            return $base . (empty($params) ? '' : ('?' . http_build_query($params)));
+        }
+
+        if ($questionMarkPos == strlen($base) - 1) { // question mark is the last character
+            return $base . (empty($params) ? '' : http_build_query($params));
+        }
+
+        return $base . (empty($params) ? '' : ('&' . http_build_query($params)));
     }
 
     // parse the message sending response
