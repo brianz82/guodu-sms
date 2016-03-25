@@ -1,0 +1,5 @@
+suites:
+    main:
+        namespace: Homer\Sms\Guodu
+        psr4_prefix: Homer\Sms\Guodu
+        src_path: src
