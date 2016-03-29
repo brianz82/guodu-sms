@@ -15,9 +15,6 @@
   },
 
   "autoload-dev": {
-    "psr-4": {
-      "spec\\": "spec/"
-    }
   },
 
   "config": {
